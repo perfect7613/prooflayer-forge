@@ -1,0 +1,15 @@
+"use client";
+import type { Run } from '@/lib/types';
+type Decision = {claimId:string; choice:string; confidence:number; probabilities:Record<string,number>};
+export function JevReview({run,busy,onReview}:{run:Run;busy:boolean;onReview:()=>unknown}) {
+  const reviews=run.evidence.filter(e=>e.kind==='jev').flatMap(e=>{try{const r=JSON.parse(e.content);return r.task==='assess'?[{...r,evidenceId:e.id,createdAt:e.createdAt}]:[];}catch{return [];}});
+  const review=reviews.at(-1);
+  return <section className="jev-panel"><div className="panel-heading"><div><span className="eyebrow">DECISION AUDIT</span><h3>Confidence, with a record</h3></div><button className="button small" disabled={busy||run.phase!=='completed'||run.presentationPending} onClick={()=>void onReview()}>{busy?'Reviewing evidence…':'Review evidence again'}</button></div>
+    <p>Each claim receives a separate evidence review. Complete bounded execution output and its implementation are included; long sources use verbatim excerpts with recorded character ranges. An inconclusive result remains a valid outcome.</p>
+    <div className="review-policy"><span>Agreement threshold <strong>0.80</strong></span><span>Policy <strong>{review?.raw?.policy?.version||'evidence-review-v1'}</strong></span><span>Calibration <strong>Not established</strong></span></div>
+    {!review&&<p className="empty">The independent evidence review appears after the report is written.</p>}
+    {review&&<><p className="figure-source">{review.model} · {review.questionVersion} · {reviews.length} retained review(s) · {new Date(review.createdAt).toLocaleString()}</p><div className="decision-grid">{review.decisions.map((d:Decision)=><article key={d.claimId}><div className="claim-top"><span className="eyebrow">{d.claimId}</span><span className="tag">{d.choice}</span></div><p>{run.claims.find(c=>c.id===d.claimId)?.text}</p><div className="confidence-value">{d.confidence.toFixed(2)} <small>answer confidence</small></div><div className="confidence-track"><span style={{width:`${Math.max(0,Math.min(1,d.confidence))*100}%`}}/><i style={{left:'80%'}}/></div><dl>{Object.entries(d.probabilities).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{(value*100).toFixed(1)}%</dd></div>)}</dl><small>{d.confidence>=.8?'Confidence passes the policy threshold; agreement and evidence are still required.':'Below the policy threshold. Requires human review.'}</small></article>)}</div>
+      <details className="view-source"><summary>Inspect review provenance</summary><pre>{JSON.stringify({model:review.model,questionVersion:review.questionVersion,stateHash:review.stateHash,policy:review.raw?.policy,requests:review.raw?.reviews?.map((r:{stateHash:string;durationMs:number})=>({stateHash:r.stateHash,durationMs:r.durationMs}))},null,2)}</pre></details></>}
+    <p className="figure-notice">Confidence measures the model’s answer distribution, not the probability that a paper is correct. No accuracy or calibration claim is made without independently labelled outcomes. Re-review preserves the earlier report and all judgments; it does not rerun an experiment.</p>
+  </section>;
+}
